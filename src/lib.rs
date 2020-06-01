@@ -1,23 +1,58 @@
 extern crate reqwest;
 extern crate tokio;
 
+use serde::Serialize;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::error::Error;
+use tokio::io;
 use tokio::prelude::*;
 
 const BASE_URL: &str = "https://api.dropboxapi.com/2";
 
-pub(crate) async fn request(
+fn trim_newline(s: &mut String) {
+    if s.ends_with('\n') {
+        s.pop();
+        if s.ends_with('\r') {
+            s.pop();
+        }
+    }
+}
+
+pub(crate) async fn request_json(
     api: &str,
-    headers: &HashMap<String, String>,
-    body_json: &HashMap<String, String>,
-) -> Result<HashMap<String, String>, Box<dyn Error>> {
-    Ok(reqwest::Client::new()
+    access_token: &str,
+    headers: Option<&HashMap<String, String>>,
+    body_json: &(impl Serialize + ?Sized),
+) -> Result<reqwest::Response, Box<dyn Error>> {
+    let mut req = reqwest::Client::new()
         .post(&format!("{}/{}", BASE_URL, api))
-        .headers(headers.try_into()?)
-        .json(body_json)
-        .send()
+        .header("Authorization", format!("Bearer {}", access_token));
+    if let Some(headers) = headers {
+        req = req.headers(headers.try_into()?);
+    }
+    Ok(req.json(body_json).send().await?)
+}
+
+pub async fn request_json_response_text(
+    api: &str,
+    access_token: &str,
+    headers: Option<&HashMap<String, String>>,
+    body_json: &(impl Serialize + ?Sized),
+) -> Result<String, Box<dyn Error>> {
+    Ok(request_json(api, access_token, headers, body_json)
+        .await?
+        .text()
+        .await?)
+}
+
+pub async fn request_json_response_json(
+    api: &str,
+    access_token: &str,
+    headers: Option<&HashMap<String, String>>,
+    body_json: &(impl Serialize + ?Sized),
+) -> Result<impl serde::de::DeserializeOwned, Box<dyn Error>> {
+    Ok(request_json(api, access_token, headers, body_json)
         .await?
         .json()
         .await?)
@@ -27,20 +62,24 @@ pub(crate) fn conf_path() -> Result<String, std::env::VarError> {
     Ok(format!("{}/.dsync_config", std::env::var("HOME")?))
 }
 
-pub(crate) async fn get_token() -> Result<String, Box<dyn Error>> {
+pub async fn get_token() -> Result<String, Box<dyn Error>> {
     let conf_path = conf_path()?;
-    if let Ok(d) = tokio::fs::read(&conf_path).await {
-        Ok(String::from_utf8(d)?)
+    let mut result = if let Ok(d) = tokio::fs::read(&conf_path).await {
+        String::from_utf8(d)?
     } else {
-        tokio::io::stdout()
-            .write_all(b"Paste the token Here: ")
-            .await?;
+        let mut stdout = io::stdout();
+        stdout.write_all(b"Paste the token Here: ").await?;
+        stdout.flush().await?;
         let mut buf = String::new();
-        tokio::io::stdin().read_to_string(&mut buf).await?;
+        io::BufReader::new(io::stdin()).read_line(&mut buf).await?;
         tokio::fs::File::create(&conf_path)
             .await?
             .write_all(buf.as_bytes())
             .await?;
-        Ok(buf)
-    }
+        buf
+    };
+
+    trim_newline(&mut result);
+
+    Ok(result)
 }
