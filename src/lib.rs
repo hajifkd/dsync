@@ -2,6 +2,7 @@ extern crate reqwest;
 extern crate tokio;
 
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::error::Error;
@@ -87,4 +88,57 @@ pub async fn get_token() -> Result<String, Box<dyn Error>> {
     trim_newline(&mut result);
 
     Ok(result)
+}
+
+fn bytes_to_hex_string(data: &[u8]) -> String {
+    data.into_iter().fold(String::new(), |mut acc, x| {
+        acc.push_str(&format!("{:02x}", x));
+        acc
+    })
+}
+
+pub fn content_hash(data: &[u8]) -> String {
+    const LEN: usize = 4 * 1024 * 1024;
+    let mut index = 0;
+    let mut hashes = vec![];
+
+    while index < data.len() {
+        let hash = Sha256::digest(&data[index..std::cmp::min(data.len(), index + LEN)]);
+        hashes.push(hash);
+        index += LEN;
+    }
+
+    bytes_to_hex_string(&Sha256::digest(&(hashes.join(&[][..])[..])))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn hash_test() {
+        let file = "milky-way-nasa.jpg";
+        let data = if let Ok(d) = tokio::fs::read(file).await {
+            d
+        } else {
+            let buf =
+                reqwest::get("https://www.dropbox.com/static/images/developers/milky-way-nasa.jpg")
+                    .await
+                    .unwrap()
+                    .bytes()
+                    .await
+                    .unwrap();
+            tokio::fs::File::create(file)
+                .await
+                .unwrap()
+                .write_all(&buf)
+                .await
+                .unwrap();
+            (&buf[..]).to_owned()
+        };
+        assert_eq!(
+            "485291fa0ee50c016982abbfa943957bcd231aae0492ccbaa22c58e3997b35e0",
+            content_hash(&data)
+        )
+    }
 }
