@@ -8,6 +8,8 @@ use std::error::Error;
 use tokio::io;
 use tokio::prelude::*;
 
+pub mod files;
+
 const BASE_URL: &str = "https://api.dropboxapi.com/2";
 
 fn trim_newline(s: &mut String) {
@@ -46,12 +48,15 @@ pub async fn request_json_response_text(
         .await?)
 }
 
-pub async fn request_json_response_json(
+pub async fn request_json_response_json<T>(
     api: &str,
     access_token: &str,
     headers: Option<&HashMap<String, String>>,
     body_json: &(impl Serialize + ?Sized),
-) -> Result<impl serde::de::DeserializeOwned, Box<dyn Error>> {
+) -> Result<T, Box<dyn Error>>
+where
+    T: serde::de::DeserializeOwned,
+{
     Ok(request_json(api, access_token, headers, body_json)
         .await?
         .json()
