@@ -1,17 +1,52 @@
+extern crate lazy_static;
+extern crate libdb;
 extern crate reqwest;
 extern crate tokio;
 
+use lazy_static::lazy_static;
+use libdb::Database;
+use libdb::Flags;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::error::Error;
+use std::sync::Mutex;
 use tokio::io;
 use tokio::prelude::*;
 
 pub mod files;
 
+pub struct BerkeleyDB {
+    db: Option<Result<Database, libdb::Error>>,
+}
+
+impl BerkeleyDB {
+    pub fn open(&mut self) -> Result<Database, std::io::Error> {
+        fn dberr_to_ioerr(e: &libdb::Error) -> std::io::Error {
+            std::io::Error::from_raw_os_error(e.errno())
+        }
+        if let Some(ref data) = self.db {
+            data.as_ref().map(|a| a.clone()).map_err(dberr_to_ioerr)
+        } else {
+            self.db = Some(
+                libdb::DatabaseBuilder::new()
+                    .flags(Flags::DB_CREATE)
+                    .file(DB_NAME)
+                    .open(),
+            );
+
+            self.open()
+        }
+    }
+}
+
+lazy_static! {
+    pub static ref DB: Mutex<BerkeleyDB> = Mutex::new(BerkeleyDB { db: None });
+}
+
 const BASE_URL: &str = "https://api.dropboxapi.com/2";
+const DB_NAME: &str = ".dsync.db";
 
 fn trim_newline(s: &mut String) {
     if s.ends_with('\n') {
@@ -90,14 +125,14 @@ pub async fn get_token() -> Result<String, Box<dyn Error>> {
     Ok(result)
 }
 
-fn bytes_to_hex_string(data: &[u8]) -> String {
+pub fn bytes_to_hex_string(data: &[u8]) -> String {
     data.into_iter().fold(String::new(), |mut acc, x| {
         acc.push_str(&format!("{:02x}", x));
         acc
     })
 }
 
-pub fn content_hash(data: &[u8]) -> String {
+pub fn content_hash(data: &[u8]) -> [u8; 32] {
     const LEN: usize = 4 * 1024 * 1024;
     let mut index = 0;
     let mut hashes = vec![];
@@ -108,7 +143,7 @@ pub fn content_hash(data: &[u8]) -> String {
         index += LEN;
     }
 
-    bytes_to_hex_string(&Sha256::digest(&(hashes.join(&[][..])[..])))
+    Sha256::digest(&(hashes.join(&[][..])[..])).into()
 }
 
 #[cfg(test)]
@@ -138,7 +173,7 @@ mod tests {
         };
         assert_eq!(
             "485291fa0ee50c016982abbfa943957bcd231aae0492ccbaa22c58e3997b35e0",
-            content_hash(&data)
+            bytes_to_hex_string(&content_hash(&data))
         )
     }
 }
