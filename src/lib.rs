@@ -1,8 +1,10 @@
+extern crate bytes;
 extern crate lazy_static;
 extern crate libdb;
 extern crate reqwest;
 extern crate tokio;
 
+use bytes::Bytes;
 use lazy_static::lazy_static;
 use libdb::Database;
 use libdb::Flags;
@@ -46,6 +48,7 @@ lazy_static! {
 }
 
 const BASE_URL: &str = "https://api.dropboxapi.com/2";
+const CONTENT_BASE_URL: &str = "https://content.dropboxapi.com/2";
 const DB_NAME: &str = ".dsync.db";
 
 fn trim_newline(s: &mut String) {
@@ -58,18 +61,51 @@ fn trim_newline(s: &mut String) {
 }
 
 pub(crate) async fn request_json(
-    api: &str,
+    url: &str,
     access_token: &str,
     headers: Option<&HashMap<String, String>>,
     body_json: &(impl Serialize + ?Sized),
 ) -> Result<reqwest::Response, Box<dyn Error>> {
     let mut req = reqwest::Client::new()
-        .post(&format!("{}/{}", BASE_URL, api))
+        .post(url)
         .header("Authorization", format!("Bearer {}", access_token));
     if let Some(headers) = headers {
         req = req.headers(headers.try_into()?);
     }
     Ok(req.json(body_json).send().await?)
+}
+
+pub(crate) async fn request(
+    url: &str,
+    access_token: &str,
+    headers: Option<&HashMap<String, String>>,
+    arg: &str,
+) -> Result<reqwest::Response, Box<dyn Error>> {
+    let mut req = reqwest::Client::new()
+        .post(url)
+        .header("Authorization", format!("Bearer {}", access_token));
+    if let Some(headers) = headers {
+        req = req.headers(headers.try_into()?);
+    }
+    Ok(req.query(&[("arg", arg)]).send().await?)
+}
+
+pub async fn request_response_blob(
+    api: &str,
+    access_token: &str,
+    headers: Option<&HashMap<String, String>>,
+    arg: &str,
+) -> Result<Bytes, Box<dyn Error>> {
+    // Should return jsonic data?
+    Ok(request(
+        &format!("{}/{}", CONTENT_BASE_URL, api),
+        access_token,
+        headers,
+        arg,
+    )
+    .await?
+    .bytes()
+    .await?)
 }
 
 pub async fn request_json_response_text(
@@ -78,10 +114,15 @@ pub async fn request_json_response_text(
     headers: Option<&HashMap<String, String>>,
     body_json: &(impl Serialize + ?Sized),
 ) -> Result<String, Box<dyn Error>> {
-    Ok(request_json(api, access_token, headers, body_json)
-        .await?
-        .text()
-        .await?)
+    Ok(request_json(
+        &format!("{}/{}", BASE_URL, api),
+        access_token,
+        headers,
+        body_json,
+    )
+    .await?
+    .text()
+    .await?)
 }
 
 pub async fn request_json_response_json<T>(
@@ -93,10 +134,15 @@ pub async fn request_json_response_json<T>(
 where
     T: serde::de::DeserializeOwned,
 {
-    Ok(request_json(api, access_token, headers, body_json)
-        .await?
-        .json()
-        .await?)
+    Ok(request_json(
+        &format!("{}/{}", BASE_URL, api),
+        access_token,
+        headers,
+        body_json,
+    )
+    .await?
+    .json()
+    .await?)
 }
 
 pub(crate) fn conf_path() -> Result<String, std::env::VarError> {
