@@ -50,6 +50,7 @@ lazy_static! {
 const BASE_URL: &str = "https://api.dropboxapi.com/2";
 const CONTENT_BASE_URL: &str = "https://content.dropboxapi.com/2";
 const DB_NAME: &str = ".dsync.db";
+const RESULT_HEADER: &str = "Dropbox-API-Result";
 
 fn trim_newline(s: &mut String) {
     if s.ends_with('\n') {
@@ -90,22 +91,29 @@ pub(crate) async fn request(
     Ok(req.query(&[("arg", arg)]).send().await?)
 }
 
-pub async fn request_response_blob(
+pub async fn request_response_blob<T>(
     api: &str,
     access_token: &str,
     headers: Option<&HashMap<String, String>>,
     arg: &str,
-) -> Result<Bytes, Box<dyn Error>> {
+) -> Result<(T, Bytes), Box<dyn Error>>
+where
+    T: serde::de::DeserializeOwned,
+{
     // Should return jsonic data?
-    Ok(request(
+    let response = request(
         &format!("{}/{}", CONTENT_BASE_URL, api),
         access_token,
         headers,
         arg,
     )
-    .await?
-    .bytes()
-    .await?)
+    .await?;
+    let result = response
+        .headers()
+        .get(RESULT_HEADER)
+        .ok_or_else(|| "Result header not found".to_owned())?
+        .to_str()?;
+    Ok((serde_json::from_str(&result)?, response.bytes().await?))
 }
 
 pub async fn request_json_response_text(

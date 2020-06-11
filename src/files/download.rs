@@ -1,9 +1,23 @@
 use crate::request_response_blob;
 use bytes::Bytes;
+use serde::Deserialize;
 use serde_json;
 use std::error::Error;
 
-pub async fn download(path: &str, token: &str) -> Result<Bytes, Box<dyn Error>> {
+#[derive(Deserialize, Debug, Clone, Eq, PartialEq, PartialOrd, Ord)]
+pub struct FileInfo {
+    name: String,
+    id: String,
+    client_modified: String,
+    server_modified: String,
+    rev: String,
+    size: u64,
+    path_lower: Option<String>,
+    path_display: Option<String>,
+    content_hash: Option<String>,
+}
+
+pub async fn download(path: &str, token: &str) -> Result<(FileInfo, Bytes), Box<dyn Error>> {
     request_response_blob(
         "files/download",
         token,
@@ -31,6 +45,7 @@ mod tests {
                 &download("/milky-way-nasa.jpg", &get_token().await.unwrap())
                     .await
                     .unwrap()
+                    .1
             ))
         )
     }
