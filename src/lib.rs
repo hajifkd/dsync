@@ -91,6 +91,23 @@ pub(crate) async fn request(
     Ok(req.query(&[("arg", arg)]).send().await?)
 }
 
+pub(crate) async fn request_blob(
+    url: &str,
+    access_token: &str,
+    headers: Option<&HashMap<String, String>>,
+    arg: &str,
+    body: impl Into<reqwest::Body>,
+) -> Result<reqwest::Response, Box<dyn Error>> {
+    let mut req = reqwest::Client::new()
+        .post(url)
+        .header("Authorization", format!("Bearer {}", access_token))
+        .header("Content-Type", "application/octet-stream");
+    if let Some(headers) = headers {
+        req = req.headers(headers.try_into()?);
+    }
+    Ok(req.query(&[("arg", arg)]).body(body).send().await?)
+}
+
 pub async fn request_response_blob<T>(
     api: &str,
     access_token: &str,
@@ -100,7 +117,6 @@ pub async fn request_response_blob<T>(
 where
     T: serde::de::DeserializeOwned,
 {
-    // Should return jsonic data?
     let response = request(
         &format!("{}/{}", CONTENT_BASE_URL, api),
         access_token,
@@ -150,6 +166,47 @@ where
     )
     .await?
     .json()
+    .await?)
+}
+
+pub async fn request_blob_response_json<T>(
+    api: &str,
+    access_token: &str,
+    headers: Option<&HashMap<String, String>>,
+    arg: &str,
+    body: impl Into<reqwest::Body>,
+) -> Result<T, Box<dyn Error>>
+where
+    T: serde::de::DeserializeOwned,
+{
+    Ok(request_blob(
+        &format!("{}/{}", CONTENT_BASE_URL, api),
+        access_token,
+        headers,
+        arg,
+        body,
+    )
+    .await?
+    .json()
+    .await?)
+}
+
+pub async fn request_blob_response_text(
+    api: &str,
+    access_token: &str,
+    headers: Option<&HashMap<String, String>>,
+    arg: &str,
+    body: impl Into<reqwest::Body>,
+) -> Result<String, Box<dyn Error>> {
+    Ok(request_blob(
+        &format!("{}/{}", CONTENT_BASE_URL, api),
+        access_token,
+        headers,
+        arg,
+        body,
+    )
+    .await?
+    .text()
     .await?)
 }
 
