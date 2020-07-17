@@ -1,55 +1,20 @@
 extern crate bytes;
-extern crate lazy_static;
-extern crate libdb;
 extern crate reqwest;
 extern crate tokio;
 
 use bytes::Bytes;
-use lazy_static::lazy_static;
-use libdb::Database;
-use libdb::Flags;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::error::Error;
-use std::sync::Mutex;
 use tokio::io;
 use tokio::prelude::*;
 
 pub mod files;
 
-pub struct BerkeleyDB {
-    db: Option<Result<Database, libdb::Error>>,
-}
-
-impl BerkeleyDB {
-    pub fn open(&mut self) -> Result<Database, std::io::Error> {
-        fn dberr_to_ioerr(e: &libdb::Error) -> std::io::Error {
-            std::io::Error::from_raw_os_error(e.errno())
-        }
-        if let Some(ref data) = self.db {
-            data.as_ref().map(|a| a.clone()).map_err(dberr_to_ioerr)
-        } else {
-            self.db = Some(
-                libdb::DatabaseBuilder::new()
-                    .flags(Flags::DB_CREATE)
-                    .file(DB_NAME)
-                    .open(),
-            );
-
-            self.open()
-        }
-    }
-}
-
-lazy_static! {
-    pub static ref DB: Mutex<BerkeleyDB> = Mutex::new(BerkeleyDB { db: None });
-}
-
 const BASE_URL: &str = "https://api.dropboxapi.com/2";
 const CONTENT_BASE_URL: &str = "https://content.dropboxapi.com/2";
-const DB_NAME: &str = ".dsync.db";
 const RESULT_HEADER: &str = "Dropbox-API-Result";
 
 fn trim_newline(s: &mut String) {

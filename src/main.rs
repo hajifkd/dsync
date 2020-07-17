@@ -1,4 +1,4 @@
-use dsync::{get_token, DB};
+use dsync::get_token;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -8,15 +8,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let data = dsync::files::download::download("/milky-way-nasa.jpg", &token).await?;
     dbg!(&data.0);
     dbg!(dsync::bytes_to_hex_string(&dsync::content_hash(&data.1)));
-
-    let db = DB.lock().unwrap().open()?;
-    db.put(
-        None,
-        "hoge".to_owned().into_bytes().as_mut_slice(),
-        "fuga".to_owned().into_bytes().as_mut_slice(),
-        libdb::Flags::DB_NONE,
-    )
-    .unwrap();
 
     Ok(())
 }
