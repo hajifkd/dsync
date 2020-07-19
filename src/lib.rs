@@ -1,5 +1,6 @@
 extern crate bytes;
 extern crate reqwest;
+extern crate rusqlite;
 extern crate tokio;
 
 use bytes::Bytes;
@@ -11,6 +12,7 @@ use std::error::Error;
 use tokio::io;
 use tokio::prelude::*;
 
+pub mod db;
 pub mod files;
 
 const BASE_URL: &str = "https://api.dropboxapi.com/2";
@@ -73,7 +75,7 @@ pub(crate) async fn request_blob(
     Ok(req.query(&[("arg", arg)]).body(body).send().await?)
 }
 
-pub async fn request_response_blob<T>(
+pub(crate) async fn request_response_blob<T>(
     api: &str,
     access_token: &str,
     headers: Option<&HashMap<String, String>>,
