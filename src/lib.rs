@@ -14,6 +14,7 @@ use tokio::prelude::*;
 
 pub mod db;
 pub mod files;
+pub mod ignore;
 
 const BASE_URL: &str = "https://api.dropboxapi.com/2";
 const CONTENT_BASE_URL: &str = "https://content.dropboxapi.com/2";
