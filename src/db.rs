@@ -5,19 +5,27 @@ const DB_NAME: &str = ".dsync.db";
 
 pub struct FileData {
     pub path: String,
-    pub hash: Option<Vec<u8>>,
+    pub hash: Vec<u8>,
 }
 
 impl FileData {
     pub fn new(path: String, hash: Vec<u8>) -> Self {
-        FileData {
-            path,
-            hash: Some(hash),
-        }
+        FileData { path, hash }
     }
+}
 
-    pub fn new_empty(path: String) -> Self {
-        FileData { path, hash: None }
+pub struct FileUpdate {
+    pub path: String,
+    pub operation: u8,
+}
+
+impl FileUpdate {
+    pub const ADD: u8 = 1;
+    pub const REMOVE: u8 = 2;
+    pub const UPDATE: u8 = 3;
+
+    pub fn new(path: String, operation: u8) -> Self {
+        FileUpdate { path, operation }
     }
 }
 
@@ -28,14 +36,15 @@ pub fn connect() -> Result<Connection> {
         "create table if not exists files (
              id integer primary key autoincrement,
              path text not null unique,
-             hash blob
+             hash blob not null
          )",
         NO_PARAMS,
     )?;
 
     conn.execute(
         "create table if not exists updates (
-             path text not null unique
+             path text not null unique,
+             operation int1 not null
          )",
         NO_PARAMS,
     )?;
@@ -57,7 +66,7 @@ pub fn upsert_files(conn: &mut Connection, files: &[FileData]) -> Result<()> {
             "insert into files (path, hash) values (?1, ?2) on conflict (path) do update set hash=excluded.hash",
             params!(
                 &file.path,
-                file.hash.as_ref().map(|v| &v[..]).unwrap_or(&[])
+                &file.hash,
             ),
         )?;
     }
@@ -66,13 +75,40 @@ pub fn upsert_files(conn: &mut Connection, files: &[FileData]) -> Result<()> {
     Ok(())
 }
 
-pub fn add_update_list(conn: &mut Connection, files_to_updates: &[&str]) -> Result<()> {
+pub fn add_update_list(conn: &mut Connection, fileupdates: &[FileUpdate]) -> Result<()> {
     let tx = conn.transaction()?;
 
-    for file in files_to_updates.into_iter() {
+    for fileupdate in fileupdates.into_iter() {
         tx.execute(
-            "insert or replace into updates (path) values (?1)",
-            params!(file),
+            "insert or replace into updates (path, operation) values (?1, ?2)",
+            params!(&fileupdate.path, &fileupdate.operation),
+        )?;
+    }
+
+    tx.commit()?;
+    Ok(())
+}
+
+pub fn list_files_to_update(conn: &Connection) -> Result<Vec<FileUpdate>> {
+    conn.prepare("select path, operation from updates order")?
+        .query_map(NO_PARAMS, |row| {
+            Ok(FileUpdate::new(row.get(0)?, row.get(1)?))
+        })?
+        .collect()
+}
+
+pub fn clear_all_files_to_update(conn: &Connection) -> Result<()> {
+    conn.execute("delete from updates", NO_PARAMS)?;
+    Ok(())
+}
+
+pub fn clear_files_to_update(conn: &mut Connection, paths: &[&str]) -> Result<()> {
+    let tx = conn.transaction()?;
+
+    for path in paths.into_iter() {
+        tx.execute(
+            "delete from updates where updates.path == ?1",
+            params!(&path),
         )?;
     }
 

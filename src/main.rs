@@ -25,5 +25,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ],
     )?;
 
+    db::clear_files_to_update(&mut c, &["a"])?;
+
     Ok(())
 }
