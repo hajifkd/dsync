@@ -1,29 +1,55 @@
 use std::fmt::Debug;
 
 pub struct FileMatchExpr(Vec<Piece<Vec<Piece<char>>>>);
+pub struct StrToMatch(Vec<Vec<char>>);
 
 impl FileMatchExpr {
-    pub fn compile(line: &str) -> FileMatchExpr {
-        FileMatchExpr(
-            line.split('/')
-                .map(|p| match p {
-                    "**" => Piece::Any,
-                    s => Piece::Piece(
-                        s.chars()
-                            .map(|c| match c {
-                                '*' => Piece::Any,
-                                c => Piece::Piece(c),
-                            })
-                            .collect(),
-                    ),
-                })
-                .collect(),
-        )
+    pub fn compile_target(targ: &str) -> StrToMatch {
+        StrToMatch(targ.split('/').map(|s| s.chars().collect()).collect())
+    }
+
+    pub fn compile(mut line: &str) -> FileMatchExpr {
+        let mut expr = vec![];
+        let mut dir = false;
+
+        if line.starts_with('/') {
+            line = &line[1..];
+        } else {
+            expr.push(Piece::Any);
+        }
+
+        if line.ends_with('/') {
+            line = &line[..line.len() - 1];
+            dir = true;
+        }
+
+        expr.extend(line.split('/').map(|p| {
+            match p {
+                "**" => Piece::Any,
+                s => Piece::Piece(
+                    s.chars()
+                        .map(|c| match c {
+                            '*' => Piece::Any,
+                            c => Piece::Piece(c),
+                        })
+                        .collect(),
+                ),
+            }
+        }));
+
+        if dir {
+            expr.push(Piece::Any);
+        }
+        FileMatchExpr(expr)
     }
 
     pub fn match_file(&self, file: &str) -> bool {
         self.0
             .match_expr(&file.split('/').map(|s| s.chars().collect()).collect())
+    }
+
+    pub fn match_file_compiled(&self, targ: &StrToMatch) -> bool {
+        self.0.match_expr(&targ.0)
     }
 }
 
@@ -41,7 +67,7 @@ pub trait Match {
 impl Match for char {
     type MatchType = char;
     fn match_expr(&self, targ: &Self::MatchType) -> bool {
-        self == targ
+        self == targ || *self == '?'
     }
 }
 
@@ -116,11 +142,13 @@ mod tests {
         let pat = FileMatchExpr::compile("hoge/fuga.rs");
         assert_eq!(pat.match_file("hoge.rs"), false);
         assert_eq!(pat.match_file("hoge/fuga.rs"), true);
+        assert_eq!(pat.match_file("piyo/hoge/fuga.rs"), true);
         assert_eq!(pat.match_file("hoge/fuga/piyo.rs"), false);
 
-        let pat = FileMatchExpr::compile("**/*.rs");
+        let pat = FileMatchExpr::compile("/**/*.r?");
         assert_eq!(pat.match_file("hoge.rs"), true);
         assert_eq!(pat.match_file("hoge.hs"), false);
+        assert_eq!(pat.match_file("hoge.ro"), true);
         assert_eq!(pat.match_file("some/nested/dir/fuga.rs"), true);
 
         let pat = FileMatchExpr::compile("hoge/**/fuga/*.rs");
@@ -128,5 +156,11 @@ mod tests {
         assert_eq!(pat.match_file("hoge.hs"), false);
         assert_eq!(pat.match_file("some/nested/dir/fuga.rs"), false);
         assert_eq!(pat.match_file("hoge/some/nested/fuga/piyo.rs"), true);
+
+        let pat = FileMatchExpr::compile("hoge/");
+        assert_eq!(pat.match_file("hoge/fuga/piyo.rs"), true);
+        assert_eq!(pat.match_file("hoge.hs"), false);
+        assert_eq!(pat.match_file("some/nested/dir/hoge/fuga.rs"), true);
+        assert_eq!(pat.match_file("hoge/some/nested/piyo.rs"), true);
     }
 }
