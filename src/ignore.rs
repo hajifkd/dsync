@@ -4,20 +4,23 @@ pub struct Ignore {
     ignores: Vec<FileMatchExpr>,
 }
 
-pub async fn parce_ignore() -> Result<Ignore, Box<dyn std::error::Error>> {
-    if let Ok(data) = tokio::fs::read(".dsyncignore").await {
-        let lines = String::from_utf8(data)?;
+pub const IGNORE_FILE: &str = ".dsyncignore";
 
-        Ok(Ignore {
-            ignores: lines
-                .split('\n')
-                .filter(|l| *l != "" && !l.starts_with('#'))
-                .map(FileMatchExpr::compile)
-                .collect(),
-        })
+pub async fn parce_ignore() -> Result<Ignore, Box<dyn std::error::Error>> {
+    let mut ignores = if let Ok(data) = tokio::fs::read(IGNORE_FILE).await {
+        let lines = String::from_utf8(data)?;
+        lines
+            .split('\n')
+            .filter(|l| *l != "" && !l.starts_with('#'))
+            .map(FileMatchExpr::compile)
+            .collect()
     } else {
-        Ok(Ignore { ignores: vec![] })
-    }
+        vec![]
+    };
+
+    ignores.push(FileMatchExpr::compile(".dsync*"));
+
+    Ok(Ignore { ignores })
 }
 
 impl Ignore {

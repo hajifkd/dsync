@@ -12,6 +12,7 @@ use std::error::Error;
 use tokio::io;
 use tokio::prelude::*;
 
+pub mod commands;
 pub mod db;
 pub mod files;
 pub mod ignore;
