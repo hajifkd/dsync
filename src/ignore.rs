@@ -1,5 +1,34 @@
 use std::fmt::Debug;
 
+pub struct Ignore {
+    ignores: Vec<FileMatchExpr>,
+}
+
+pub async fn parce_ignore() -> Result<Ignore, Box<dyn std::error::Error>> {
+    if let Ok(data) = tokio::fs::read(".dsyncignore").await {
+        let lines = String::from_utf8(data)?;
+
+        Ok(Ignore {
+            ignores: lines
+                .split('\n')
+                .filter(|l| *l != "" && !l.starts_with('#'))
+                .map(FileMatchExpr::compile)
+                .collect(),
+        })
+    } else {
+        Ok(Ignore { ignores: vec![] })
+    }
+}
+
+impl Ignore {
+    pub fn is_ignored(&self, file: &str) -> bool {
+        let compiled = FileMatchExpr::compile_target(file);
+        self.ignores
+            .iter()
+            .any(|i| i.match_file_compiled(&compiled))
+    }
+}
+
 pub struct FileMatchExpr(Vec<Piece<Vec<Piece<char>>>>);
 pub struct StrToMatch(Vec<Vec<char>>);
 
@@ -38,6 +67,7 @@ impl FileMatchExpr {
         }));
 
         if dir {
+            expr.push(Piece::Piece(vec![Piece::Piece('?'), Piece::Any]));
             expr.push(Piece::Any);
         }
         FileMatchExpr(expr)
@@ -159,6 +189,7 @@ mod tests {
 
         let pat = FileMatchExpr::compile("hoge/");
         assert_eq!(pat.match_file("hoge/fuga/piyo.rs"), true);
+        assert_eq!(pat.match_file("hoge"), false);
         assert_eq!(pat.match_file("hoge.hs"), false);
         assert_eq!(pat.match_file("some/nested/dir/hoge/fuga.rs"), true);
         assert_eq!(pat.match_file("hoge/some/nested/piyo.rs"), true);
