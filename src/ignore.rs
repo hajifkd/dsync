@@ -6,8 +6,8 @@ pub struct Ignore {
 
 pub const IGNORE_FILE: &str = ".dsyncignore";
 
-pub async fn parce_ignore() -> Result<Ignore, Box<dyn std::error::Error>> {
-    let mut ignores = if let Ok(data) = tokio::fs::read(IGNORE_FILE).await {
+async fn _parce_ignore(filename: &str) -> Result<Ignore, Box<dyn std::error::Error>> {
+    let mut ignores = if let Ok(data) = tokio::fs::read(filename).await {
         let lines = String::from_utf8(data)?;
         lines
             .split('\n')
@@ -21,6 +21,10 @@ pub async fn parce_ignore() -> Result<Ignore, Box<dyn std::error::Error>> {
     ignores.push(FileMatchExpr::compile(".dsync*"));
 
     Ok(Ignore { ignores })
+}
+
+pub async fn parce_ignore() -> Result<Ignore, Box<dyn std::error::Error>> {
+    _parce_ignore(IGNORE_FILE).await
 }
 
 impl Ignore {
@@ -196,5 +200,31 @@ mod tests {
         assert_eq!(pat.match_file("hoge.hs"), false);
         assert_eq!(pat.match_file("some/nested/dir/hoge/fuga.rs"), true);
         assert_eq!(pat.match_file("hoge/some/nested/piyo.rs"), true);
+    }
+
+    #[tokio::test]
+    async fn parse_ignore_test() {
+        let filename = "dsync_ignore_test";
+        tokio::fs::write(
+            filename,
+            "#comment
+hoge/
+
+/fuga/piyo
+
+foo/**",
+        )
+        .await
+        .unwrap();
+
+        let ignores = _parce_ignore(filename).await.unwrap();
+        assert_eq!(ignores.is_ignored("comment"), false);
+        assert_eq!(ignores.is_ignored("#comment"), false);
+        assert_eq!(ignores.is_ignored(""), false);
+        assert_eq!(ignores.is_ignored("aaaa/hoge/bbbb"), true);
+        assert_eq!(ignores.is_ignored("some/nested/folder/foo/bar"), true);
+        assert_eq!(ignores.is_ignored("some/nested/folder/fuga/piyo"), false);
+
+        tokio::fs::remove_file(filename).await.unwrap();
     }
 }
