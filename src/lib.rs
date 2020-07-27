@@ -45,7 +45,7 @@ pub(crate) async fn request_json(
     Ok(req.json(body_json).send().await?)
 }
 
-pub(crate) async fn request(
+async fn request(
     url: &str,
     access_token: &str,
     headers: Option<&HashMap<String, String>>,
@@ -60,7 +60,7 @@ pub(crate) async fn request(
     Ok(req.query(&[("arg", arg)]).send().await?)
 }
 
-pub(crate) async fn request_blob(
+async fn request_blob(
     url: &str,
     access_token: &str,
     headers: Option<&HashMap<String, String>>,

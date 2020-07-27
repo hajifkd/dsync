@@ -3,3 +3,5 @@ Cargo.lock
 milky-way-nasa.jpg
 __db.*
 *.db
+.dsync*
+dsync_test

@@ -36,10 +36,14 @@ pub async fn clone(
             for entry in entries.into_iter() {
                 match entry {
                     Entry::File(file_info) => {
-                        new_files.push(file_info.name);
+                        if let Some(name) = file_info.path_display {
+                            new_files.push(name);
+                        }
                     }
-                    Entry::Folder { name, .. } => {
-                        new_dirs.push(name);
+                    Entry::Folder { path_display, .. } => {
+                        if let Some(name) = path_display {
+                            new_dirs.push(name);
+                        }
                     }
                     _ => (),
                 }
