@@ -2,7 +2,7 @@ extern crate clap;
 
 use clap::Clap;
 use dsync::commands;
-use dsync::{db, get_token};
+use dsync::get_token;
 
 #[derive(Clap)]
 #[clap(version = "0.1", author = "Hajime Fukuda <hajifkd@gmail.com>")]

@@ -29,8 +29,10 @@ impl FileUpdate {
     }
 }
 
-pub fn connect() -> Result<Connection> {
-    let conn = Connection::open(DB_NAME)?;
+pub fn connect(root: impl AsRef<std::path::Path>) -> Result<Connection> {
+    let mut path = root.as_ref().to_owned();
+    path.push(DB_NAME);
+    let conn = Connection::open(&path)?;
 
     conn.execute(
         "create table if not exists files (
@@ -56,6 +58,18 @@ pub fn list_files_sorted(conn: &Connection) -> Result<Vec<FileData>> {
     conn.prepare("select path, hash from files order by path asc")?
         .query_map(NO_PARAMS, |row| Ok(FileData::new(row.get(0)?, row.get(1)?)))?
         .collect()
+}
+
+pub fn upsert_file(conn: &Connection, file: &FileData) -> Result<()> {
+    conn.execute(
+        "insert into files (path, hash) values (?1, ?2) on conflict (path) do update set hash=excluded.hash",
+        params!(
+            &file.path,
+            &file.hash,
+        ),
+    )?;
+
+    Ok(())
 }
 
 pub fn upsert_files(conn: &mut Connection, files: &[FileData]) -> Result<()> {
