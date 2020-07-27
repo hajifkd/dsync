@@ -1,21 +1,8 @@
+use super::FileInfo;
 use crate::request_response_blob;
 use bytes::Bytes;
-use serde::Deserialize;
 use serde_json;
 use std::error::Error;
-
-#[derive(Deserialize, Debug, Clone, Eq, PartialEq, PartialOrd, Ord)]
-pub struct FileInfo {
-    pub name: String,
-    pub id: String,
-    pub client_modified: String,
-    pub server_modified: String,
-    pub rev: String,
-    pub size: u64,
-    pub path_lower: Option<String>,
-    pub path_display: Option<String>,
-    pub content_hash: Option<String>,
-}
 
 pub async fn download(path: &str, token: &str) -> Result<(FileInfo, Bytes), Box<dyn Error>> {
     request_response_blob(

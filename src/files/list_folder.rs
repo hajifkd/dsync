@@ -14,7 +14,7 @@ struct ListFolder {
 #[derive(Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(tag = ".tag", rename_all = "lowercase")]
 pub enum Entry {
-    File(super::download::FileInfo),
+    File(super::FileInfo),
     Folder {
         name: String,
         id: String,

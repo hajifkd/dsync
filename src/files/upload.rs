@@ -1,4 +1,4 @@
-use super::download::FileInfo;
+use super::FileInfo;
 use crate::request_blob_response_json;
 use serde_json::{json, Value};
 use std::collections::HashMap;
