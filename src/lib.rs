@@ -1,5 +1,6 @@
 extern crate bytes;
 extern crate hex;
+extern crate log;
 extern crate reqwest;
 extern crate rusqlite;
 extern crate tokio;
