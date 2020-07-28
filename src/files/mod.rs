@@ -1,4 +1,5 @@
 pub mod download;
+pub mod get_metadata;
 pub mod list_folder;
 pub mod upload;
 use serde::Deserialize;
