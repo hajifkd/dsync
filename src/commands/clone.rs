@@ -1,7 +1,8 @@
-use super::{construct_local_path, create_metadir, save_config, upsert_metadata, Config};
+use super::{
+    construct_local_path, create_metadir, save_config, upsert_metadata, visit_all_dirs, Config,
+};
 use crate::db;
 use crate::files::download;
-use crate::files::list_folder::Entry;
 use crate::ignore::{parce_ignore, IGNORE_FILE};
 use tokio::fs;
 
@@ -27,17 +28,19 @@ pub async fn clone(
         local_root.to_string_lossy()
     );
 
-    visit_all_files_and_dirs!(
-        vec![remote_path.to_owned()],
-        Vec::<String>::new(),
-        &ignore_filter,
-        &config,
-        local_root,
-        &conn,
-        token,
-        download_file,
-        create_dirs
-    );
+    let (dirs, files) = visit_all_dirs(remote_path, &ignore_filter, token).await?;
+
+    for dir in dirs.iter() {
+        create_dirs(dir, &config, local_root).await?;
+    }
+
+    for file in files.iter() {
+        if let Some(ref name) = file.path_display {
+            if !ignore_filter.is_ignored(name) {
+                download_file(name, &config, &local_root, &conn, token).await?;
+            }
+        }
+    }
 
     let curr_dir = std::env::current_dir()?;
     let is_curr = std::fs::canonicalize(&curr_dir)? == std::fs::canonicalize(local_root)?;
@@ -80,7 +83,7 @@ async fn create_dirs(
     remote_dir: &str,
     config: &Config,
     local_root: &Path,
-    _conn: &rusqlite::Connection,
+    // _conn: &rusqlite::Connection,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let local_dir = construct_local_path(remote_dir, config, local_root);
     println!("Creating directory {} ...", local_dir.to_string_lossy());

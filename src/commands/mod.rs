@@ -1,9 +1,13 @@
 use crate::files::list_folder::{self, Entry};
+use crate::files::FileInfo;
+use crate::ignore::Ignore;
 use crate::{db, files};
 use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::path::{Path, PathBuf};
 use tokio::fs;
+
+pub mod clone;
 
 pub const CONF_DIR: &str = ".dsync";
 pub const CONF_FILE: &str = ".dsyncconfig";
@@ -101,50 +105,39 @@ async fn read_dir(
     Ok(entries)
 }
 
-// TODO make it a function to return dirs and files
-macro_rules! visit_all_files_and_dirs {
-    ($dirs: expr, $files: expr, $ignore_filter: expr, $config: expr, $local_root: expr, $conn: expr, $token: expr, $process_file: expr, $process_dir:expr) => {{
-        // This is intentionally non-parallel
-        let mut dirs = $dirs;
-        let mut files = $files;
-        while dirs.len() > 0 || files.len() > 0 {
-            for file in files.iter() {
-                if !$ignore_filter.is_ignored(file) {
-                    $process_file(file, $config, $local_root, $conn, $token).await?;
-                }
+pub(crate) async fn visit_all_dirs(
+    initial: &str,
+    ignore_filter: &Ignore,
+    token: &str,
+) -> Result<(Vec<String>, Vec<FileInfo>), Box<dyn Error>> {
+    let mut dirs = vec![initial.to_owned()];
+    let mut index = 0;
+    let mut files = vec![];
+
+    while index < dirs.len() {
+        let new_index = dirs.len();
+        for i in index..new_index {
+            let dir = &dirs[i];
+            if ignore_filter.is_ignored(dir) {
+                continue;
             }
 
-            let mut new_dirs = vec![];
-            let mut new_files = vec![];
+            let entries = read_dir(dir, token).await?;
 
-            for dir in dirs.iter() {
-                if $ignore_filter.is_ignored(dir) {
-                    continue;
-                }
-                $process_dir(dir, $config, $local_root, $conn).await?;
-                let entries = super::read_dir(dir, $token).await?;
-
-                for entry in entries.into_iter() {
-                    match entry {
-                        Entry::File(file_info) => {
-                            if let Some(name) = file_info.path_display {
-                                new_files.push(name);
-                            }
+            for entry in entries.into_iter() {
+                match entry {
+                    Entry::File(file_info) => files.push(file_info),
+                    Entry::Folder { path_display, .. } => {
+                        if let Some(name) = path_display {
+                            dirs.push(name);
                         }
-                        Entry::Folder { path_display, .. } => {
-                            if let Some(name) = path_display {
-                                new_dirs.push(name);
-                            }
-                        }
-                        _ => (),
                     }
+                    _ => (),
                 }
             }
-
-            dirs = new_dirs;
-            files = new_files;
         }
-    }};
-}
+        index = new_index;
+    }
 
-pub mod clone;
+    Ok((dirs, files))
+}
