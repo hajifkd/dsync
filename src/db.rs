@@ -1,5 +1,6 @@
 use rusqlite::NO_PARAMS;
 use rusqlite::{params, Connection, Result};
+use std::collections::HashMap;
 
 const DB_NAME: &str = ".dsync.db";
 
@@ -54,9 +55,11 @@ pub fn connect(root: impl AsRef<std::path::Path>) -> Result<Connection> {
     Ok(conn)
 }
 
-pub fn list_files_sorted(conn: &Connection) -> Result<Vec<FileData>> {
-    conn.prepare("select path, hash from files order by path asc")?
-        .query_map(NO_PARAMS, |row| Ok(FileData::new(row.get(0)?, row.get(1)?)))?
+pub fn list_files(conn: &Connection) -> Result<HashMap<String, FileData>> {
+    conn.prepare("select path, hash from files")?
+        .query_map(NO_PARAMS, |row| {
+            Ok((row.get(0)?, FileData::new(row.get(0)?, row.get(1)?)))
+        })?
         .collect()
 }
 

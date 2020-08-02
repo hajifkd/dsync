@@ -8,10 +8,11 @@ pub const IGNORE_FILE: &str = ".dsyncignore";
 
 async fn _parce_ignore(filename: &str) -> Result<Ignore, Box<dyn std::error::Error>> {
     let mut ignores = if let Ok(data) = tokio::fs::read(filename).await {
-        let lines = String::from_utf8(data)?;
+        let lines = String::from_utf8(data).map_err(|_| format!("invalid .dsyncignore file"))?;
         lines
             .split('\n')
             .filter(|l| *l != "" && !l.starts_with('#'))
+            .map(|l| l.trim())
             .map(FileMatchExpr::compile)
             .collect()
     } else {

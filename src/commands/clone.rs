@@ -10,10 +10,11 @@ use std::path::Path;
 
 pub async fn clone(
     remote_path: &str,
-    local_root: &Path,
+    local_root: impl AsRef<Path>,
     token: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let ignore_filter = parce_ignore().await?;
+    let local_root = local_root.as_ref();
 
     fs::create_dir_all(local_root).await?;
     let conn = db::connect(local_root)?;

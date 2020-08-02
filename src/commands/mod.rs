@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 use tokio::fs;
 
 pub mod clone;
+pub mod pull;
 
 pub const CONF_DIR: &str = ".dsync";
 pub const CONF_FILE: &str = ".dsyncconfig";
@@ -141,3 +142,6 @@ pub(crate) async fn visit_all_dirs(
 
     Ok((dirs, files))
 }
+
+// TODO
+// pub(crate) fn find_files_with_prefix(config: &Config, sorted_files: &[&str], dir: &str) -> &[&str]

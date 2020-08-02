@@ -45,7 +45,7 @@ async fn clone(command: CloneCommand, token: &str) -> Result<(), Box<dyn std::er
         }
     };
 
-    commands::clone::clone(&remote_path, local_path.as_ref(), token).await?;
+    commands::clone::clone(&remote_path, local_path, token).await?;
 
     Ok(())
 }
