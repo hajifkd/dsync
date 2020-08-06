@@ -1,8 +1,5 @@
-use super::{
-    construct_local_path, create_metadir, save_config, upsert_metadata, visit_all_dirs, Config,
-};
+use super::{create_dirs, download_file, save_config, visit_all_dirs, Config};
 use crate::db;
-use crate::files::download;
 use crate::ignore::{parce_ignore, IGNORE_FILE};
 use tokio::fs;
 
@@ -19,17 +16,19 @@ pub async fn clone(
     fs::create_dir_all(local_root).await?;
     let conn = db::connect(local_root)?;
 
-    let config = Config {
-        remote_path: remote_path.to_owned(),
-    };
-
     println!(
         "Cloning {} into {} ...",
         remote_path,
         local_root.to_string_lossy()
     );
 
-    let (dirs, files) = visit_all_dirs(remote_path, &ignore_filter, token).await?;
+    let (dirs, files) =
+        visit_all_dirs(remote_path, remote_path.len(), &ignore_filter, token).await?;
+
+    let config = Config {
+        remote_path: remote_path.to_owned(),
+        sync_dirs: dirs.clone(),
+    };
 
     for dir in dirs.iter() {
         create_dirs(dir, &config, local_root).await?;
@@ -37,9 +36,7 @@ pub async fn clone(
 
     for file in files.iter() {
         if let Some(ref name) = file.path_display {
-            if !ignore_filter.is_ignored(name) {
-                download_file(name, &config, &local_root, &conn, token).await?;
-            }
+            download_file(name, &config, &local_root, &conn, token).await?;
         }
     }
 
@@ -58,37 +55,5 @@ pub async fn clone(
     save_config(&config, local_root).await?;
 
     println!("done.");
-    Ok(())
-}
-
-async fn download_file(
-    remote_path: &str,
-    config: &Config,
-    local_root: &Path,
-    conn: &rusqlite::Connection,
-    token: &str,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let local_file = construct_local_path(remote_path, config, local_root);
-    println!(
-        "Found file {}. Downloading to {} ...",
-        remote_path,
-        local_file.to_string_lossy()
-    );
-    let (info, data) = download::download(remote_path, token).await?;
-    upsert_metadata(local_root, conn, config, info, &data).await?;
-    fs::write(local_file, data).await?;
-    Ok(())
-}
-
-async fn create_dirs(
-    remote_dir: &str,
-    config: &Config,
-    local_root: &Path,
-    // _conn: &rusqlite::Connection,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let local_dir = construct_local_path(remote_dir, config, local_root);
-    println!("Creating directory {} ...", local_dir.to_string_lossy());
-    fs::create_dir_all(local_dir).await?;
-    create_metadir(remote_dir, config, local_root).await?;
     Ok(())
 }

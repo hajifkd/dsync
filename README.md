@@ -4,4 +4,4 @@ https://www.dropbox.com/developers/documentation/http/documentation
 
 # TODO
 
-* auth flow (use http server in rust)
+* auth flow (use `response_type=code`?)

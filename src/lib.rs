@@ -228,6 +228,13 @@ pub fn content_hash(data: &[u8]) -> [u8; 32] {
     Sha256::digest(&(hashes.join(&[][..])[..])).into()
 }
 
+pub(crate) async fn file_hash(path: impl AsRef<std::path::Path>) -> io::Result<[u8; 32]> {
+    let path = path.as_ref();
+    let data = tokio::fs::read(path).await?;
+    // TODO tokio block?
+    Ok(content_hash(&data))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
