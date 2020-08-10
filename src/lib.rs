@@ -14,6 +14,7 @@ use std::error::Error;
 use tokio::io;
 use tokio::prelude::*;
 
+pub mod auth;
 pub mod commands;
 pub mod db;
 pub mod files;
@@ -22,15 +23,6 @@ pub mod ignore;
 const BASE_URL: &str = "https://api.dropboxapi.com/2";
 const CONTENT_BASE_URL: &str = "https://content.dropboxapi.com/2";
 const RESULT_HEADER: &str = "Dropbox-API-Result";
-
-fn trim_newline(s: &mut String) {
-    if s.ends_with('\n') {
-        s.pop();
-        if s.ends_with('\r') {
-            s.pop();
-        }
-    }
-}
 
 pub(crate) async fn request_json(
     url: &str,
@@ -129,15 +121,8 @@ pub async fn request_json_response_json<T>(
 where
     T: serde::de::DeserializeOwned,
 {
-    Ok(request_json(
-        &format!("{}/{}", BASE_URL, api),
-        access_token,
-        headers,
-        body_json,
-    )
-    .await?
-    .json()
-    .await?)
+    let data = request_json_response_text(api, access_token, headers, body_json).await?;
+    serde_json::from_str(&data).map_err(|_| data.into())
 }
 
 pub async fn request_blob_response_json<T>(
@@ -150,16 +135,8 @@ pub async fn request_blob_response_json<T>(
 where
     T: serde::de::DeserializeOwned,
 {
-    Ok(request_blob(
-        &format!("{}/{}", CONTENT_BASE_URL, api),
-        access_token,
-        headers,
-        arg,
-        body,
-    )
-    .await?
-    .json()
-    .await?)
+    let data = request_blob_response_text(api, access_token, headers, arg, body).await?;
+    serde_json::from_str(&data).map_err(|_| data.into())
 }
 
 pub async fn request_blob_response_text(
@@ -185,24 +162,28 @@ pub(crate) fn conf_path() -> Result<String, std::env::VarError> {
     Ok(format!("{}/.dsync_config", std::env::var("HOME")?))
 }
 
+const CODE_URL: &str =
+    "https://www.dropbox.com/oauth2/authorize?client_id=64s4zj0hgs5kpfu&response_type=code";
+
 pub async fn get_token() -> Result<String, Box<dyn Error>> {
     let conf_path = conf_path()?;
-    let mut result = if let Ok(d) = tokio::fs::read(&conf_path).await {
+    let result = if let Ok(d) = tokio::fs::read(&conf_path).await {
         String::from_utf8(d)?
     } else {
         let mut stdout = io::stdout();
-        stdout.write_all(b"Paste the token Here: ").await?;
+        stdout
+            .write_all(format!("Access {} and paste the token Here: ", CODE_URL).as_bytes())
+            .await?;
         stdout.flush().await?;
         let mut buf = String::new();
         io::BufReader::new(io::stdin()).read_line(&mut buf).await?;
+        let token = auth::code_to_token(buf.trim()).await?;
         tokio::fs::File::create(&conf_path)
             .await?
-            .write_all(buf.as_bytes())
+            .write_all(token.as_bytes())
             .await?;
-        buf
+        token
     };
-
-    trim_newline(&mut result);
 
     Ok(result)
 }
