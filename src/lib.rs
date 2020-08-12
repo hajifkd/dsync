@@ -1,4 +1,5 @@
 extern crate bytes;
+extern crate diffmerge;
 extern crate hex;
 extern crate log;
 extern crate reqwest;

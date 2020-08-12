@@ -75,6 +75,12 @@ pub fn upsert_file(conn: &Connection, file: &FileData) -> Result<()> {
     Ok(())
 }
 
+pub fn delete_file_entry(conn: &Connection, path: &str) -> Result<()> {
+    conn.execute("delete from files where path = ?", params!(path))?;
+    conn.execute("delete from updates where path = ?", params!(path))?;
+    Ok(())
+}
+
 pub fn upsert_files(conn: &mut Connection, files: &[FileData]) -> Result<()> {
     let tx = conn.transaction()?;
 

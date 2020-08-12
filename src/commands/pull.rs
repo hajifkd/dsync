@@ -1,10 +1,11 @@
 use super::{
     construct_local_path, construct_meta_path, create_dirs, download_file, file_status,
-    load_config, visit_all_dirs, Config, FileStatus,
+    load_config, save_config, visit_all_dirs, Config, FileStatus,
 };
-use crate::files::FileInfo;
+use crate::files::{download, FileInfo};
 use crate::ignore::parce_ignore;
-use crate::{db, file_hash};
+use crate::{content_hash, db, file_hash};
+use diffmerge::merge;
 use rusqlite::Connection;
 use std::collections::HashMap;
 
@@ -70,6 +71,10 @@ pub async fn clone(
         }
     }
 
+    if i_local_dir < local_dirs.len() {
+        dir_to_remove.extend(local_dirs[i_local_dir..].iter());
+    }
+
     let files_to_unlink = update_files(
         &remote_files,
         local_files,
@@ -82,7 +87,24 @@ pub async fn clone(
 
     unlink_files(&files_to_unlink, local_root, &config, &conn).await?;
 
-    // TODO remove directories
+    // remove directories
+    dir_to_remove.sort_unstable_by(|a, b| b.cmp(a));
+    for dir in dir_to_remove.iter() {
+        let local_path = construct_local_path(dir, &config, local_root);
+        let meta_path = construct_meta_path(dir, &config, local_root);
+        if tokio::fs::remove_dir(&meta_path).await.is_err()
+            || tokio::fs::remove_dir(&local_path).await.is_err()
+        {
+            println!(
+                "Directory {} is not empty. Ignoring...",
+                local_path.display()
+            );
+        }
+    }
+
+    let mut config = config.clone();
+    config.sync_dirs = remote_dirs;
+    save_config(&config, local_root).await?;
 
     Ok(())
 }
@@ -137,6 +159,71 @@ async fn update_files(
             }
             FileStatus::Conflicted => {
                 // merge
+                println!(
+                    "Conflict found in file {}. Merging ...",
+                    local_path.display()
+                );
+                let (remote_info, remote_data) = download::download(&path, token).await?;
+                let remote_data_str = String::from_utf8(remote_data.to_vec());
+                let repo_data_str = String::from_utf8(tokio::fs::read(&local_path).await?);
+                let orig_data_str = String::from_utf8(tokio::fs::read(&meta_path).await?);
+                if remote_data_str.is_ok() && repo_data_str.is_ok() && orig_data_str.is_ok() {
+                    // Try to merge
+                    let mut merged = merge(
+                        orig_data_str.as_ref().unwrap(),
+                        repo_data_str.as_ref().unwrap(),
+                        remote_data_str.as_ref().unwrap(),
+                    );
+
+                    // hash?
+                    merged.set_names("local data", "remote data");
+
+                    let merge_data = format!("{}", merged);
+                    tokio::fs::write(&local_path, &merge_data).await?;
+
+                    if merged.is_successful() {
+                        db::upsert_file(
+                            conn,
+                            &db::FileData::new(
+                                path.to_owned(),
+                                content_hash(merge_data.as_bytes()).to_vec(),
+                            ),
+                        )?;
+                        println!("  - Merged sucessfully!");
+                    } else {
+                        println!("  - Failed to merge...");
+                    }
+                } else {
+                    const CONFLICT_SUFFIX: &str = "CONFLICTED";
+                    let mut conflict_path = local_path.clone();
+                    if let Some(ext) = local_path.extension() {
+                        let mut new_ext = std::ffi::OsString::from(CONFLICT_SUFFIX);
+                        new_ext.push(".");
+                        new_ext.push(ext);
+                        conflict_path.set_extension(new_ext);
+                    } else {
+                        conflict_path.set_extension(CONFLICT_SUFFIX);
+                    }
+                    println!(
+                        "  - Cannot merge binary files. Downloading remote file at {} ...",
+                        conflict_path.display()
+                    );
+                    // change the local hash to the remote value
+                    db::upsert_file(
+                        conn,
+                        &db::FileData::new(
+                            path.to_owned(),
+                            remote_info
+                                .content_hash
+                                .and_then(|s| hex::decode(s).ok())
+                                .unwrap_or_else(|| content_hash(&remote_data).to_vec()),
+                        ),
+                    )?;
+                    tokio::fs::write(&conflict_path, &remote_data).await?;
+                }
+
+                // Update original value
+                tokio::fs::write(&meta_path, &remote_data).await?;
             }
             FileStatus::IdenticallyChanged => {
                 println!(
@@ -153,7 +240,7 @@ async fn update_files(
                 // Do nothing. logging?
             }
             FileStatus::ToBeRemoved => {
-                panic!("Never reach here");
+                unreachable!();
             }
         }
     }
@@ -192,7 +279,8 @@ async fn unlink_files(
                     "CONFLICT: File {} is remotely removed but locally modified.",
                     local_path.display()
                 );
-                // TODO add data in a conflict controlling table
+                tokio::fs::remove_file(meta_path).await?;
+                db::delete_file_entry(conn, path)?;
             }
             FileStatus::IdenticallyChanged => {
                 println!(
@@ -204,13 +292,13 @@ async fn unlink_files(
             FileStatus::ToBeRemoved => {
                 tokio::fs::remove_file(local_path).await?;
                 tokio::fs::remove_file(meta_path).await?;
-                // TODO delete entry from DB.
+                db::delete_file_entry(conn, path)?;
             }
             FileStatus::ToBeUpdated
             | FileStatus::ToBeCreated
             | FileStatus::NotChanged
             | FileStatus::OnlyLocallyChanged => {
-                panic!("Never reach here");
+                unreachable!();
             }
         }
     }
