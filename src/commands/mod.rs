@@ -64,6 +64,31 @@ pub(crate) fn construct_local_path(
     local_path
 }
 
+pub(crate) fn construct_remote_path(
+    local_path: impl AsRef<Path>,
+    config: &Config,
+    local_root: impl AsRef<Path>,
+) -> Result<String, Box<dyn Error>> {
+    let local_canonical_path = local_path.as_ref().canonicalize()?;
+    let canonical_root = local_root.as_ref().canonicalize()?;
+    let addition = local_canonical_path.strip_prefix(canonical_root)?;
+    let addition = addition
+        .strip_prefix(std::path::MAIN_SEPARATOR.to_string()) // remove / if exists
+        .unwrap_or(addition)
+        .iter() // replace the separator into /
+        .map(|s| s.to_str())
+        .collect::<Option<Vec<_>>>()
+        .ok_or_else(|| format!("Invalid file name {}", local_path.as_ref().display()))?
+        .join("/");
+    let ref remote_path = config.remote_path;
+
+    if remote_path.ends_with("/") {
+        Ok(format!("{}{}", remote_path, addition))
+    } else {
+        Ok(format!("{}/{}", remote_path, addition))
+    }
+}
+
 pub(crate) fn construct_meta_path(
     remote_path: &str,
     config: &Config,
