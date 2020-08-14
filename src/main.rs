@@ -14,12 +14,29 @@ struct Opts {
 #[derive(Clap)]
 enum SubCommand {
     Clone(CloneCommand),
+    Pull,
+    Add(AddCommand),
 }
 
 #[derive(Clap)]
 struct CloneCommand {
     remote_path: String,
     local_path: Option<String>,
+}
+
+#[derive(Clap)]
+struct AddCommand {
+    local_path: String,
+}
+
+async fn add(command: AddCommand, token: &str) -> Result<(), Box<dyn std::error::Error>> {
+    commands::add::add(&command.local_path, std::env::current_dir()?).await?;
+    Ok(())
+}
+
+async fn pull(token: &str) -> Result<(), Box<dyn std::error::Error>> {
+    commands::pull::pull(std::env::current_dir()?, token).await?;
+    Ok(())
 }
 
 async fn clone(command: CloneCommand, token: &str) -> Result<(), Box<dyn std::error::Error>> {
@@ -58,6 +75,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     match opts.subcmd {
         SubCommand::Clone(command) => {
             clone(command, &token).await?;
+        }
+        SubCommand::Pull => {
+            pull(&token).await?;
+        }
+        SubCommand::Add(command) => {
+            add(command, &token).await?;
         }
     }
 

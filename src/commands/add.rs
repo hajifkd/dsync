@@ -1,8 +1,11 @@
-use super::{construct_remote_path, load_config, save_config};
-use crate::db::{self, Connection};
+use super::{construct_remote_path, load_config, Config};
+use crate::db;
 use crate::file_hash;
 use crate::ignore::parce_ignore;
+use futures::prelude::*;
+use rusqlite::Connection;
 
+use std::error::Error;
 use std::path::Path;
 
 pub async fn add(
@@ -19,15 +22,16 @@ pub async fn add(
         )
     })?;
     let conn = db::connect(local_root)?;
-    // remote_path never ends with /.
-    let remote_path = construct_remote_path(target, &config, &local_root)?;
 
     if target.is_file() {
+        // remote_path never ends with /.
+        let remote_path = construct_remote_path(target, &config, &local_root)?;
         db::upsert_file(
-            conn,
-            db::FileData::new(remote_path, file_hash(target).await?.to_vec()),
-        )
+            &conn,
+            &db::FileData::new(remote_path, file_hash(target).await?.to_vec()),
+        )?;
     } else if target.is_dir() {
+        add_dir(target, &config, &local_root, &conn).await?;
     } else {
         return Err(format!(
             "File {} does not exist or is not either a file or directory.",
@@ -41,11 +45,34 @@ pub async fn add(
 
 async fn add_dir(
     target: &Path,
-    remote_path: String,
+    config: &Config,
+    local_root: &Path,
     conn: &Connection,
 ) -> Result<(), Box<dyn Error>> {
-    db::upsert_file(
-        conn,
-        db::FileData::new(remote_path, file_hash(target).await?.to_vec()),
-    )
+    // List all files under target and upsert.
+    let mut dirs = vec![target.to_owned()];
+
+    while dirs.len() != 0 {
+        let mut new_dirs = vec![];
+        for dir in dirs.iter() {
+            let mut reads = tokio::fs::read_dir(dir).await?;
+            while let Some(entry) = reads.next().await {
+                let path = entry?.path();
+                if path.is_file() {
+                    // remote_path never ends with /.
+                    let remote_path = construct_remote_path(&path, &config, &local_root)?;
+                    db::upsert_file(
+                        conn,
+                        &db::FileData::new(remote_path, file_hash(&path).await?.to_vec()),
+                    )?;
+                } else if path.is_dir() {
+                    new_dirs.push(path);
+                }
+            }
+        }
+
+        dirs = new_dirs;
+    }
+
+    Ok(())
 }

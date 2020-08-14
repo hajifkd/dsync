@@ -11,7 +11,7 @@ use std::collections::HashMap;
 
 use std::path::Path;
 
-pub async fn clone(
+pub async fn pull(
     local_root: impl AsRef<Path>,
     token: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {

@@ -9,6 +9,7 @@ use std::error::Error;
 use std::path::{Path, PathBuf};
 use tokio::fs;
 
+pub mod add;
 pub mod clone;
 pub mod pull;
 
