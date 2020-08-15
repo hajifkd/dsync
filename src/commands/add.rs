@@ -1,7 +1,7 @@
 use super::{construct_remote_path, load_config, Config};
 use crate::db;
 use crate::file_hash;
-use crate::ignore::parce_ignore;
+use crate::ignore::{parce_ignore, Ignore};
 use futures::prelude::*;
 use rusqlite::Connection;
 
@@ -23,6 +23,10 @@ pub async fn add(
     })?;
     let conn = db::connect(local_root)?;
 
+    if ignore_filter.is_ignored(&target.to_string_lossy()) {
+        return Ok(());
+    }
+
     if target.is_file() {
         // remote_path never ends with /.
         let remote_path = construct_remote_path(target, &config, &local_root)?;
@@ -31,7 +35,7 @@ pub async fn add(
             &db::FileData::new(remote_path, file_hash(target).await?.to_vec()),
         )?;
     } else if target.is_dir() {
-        add_dir(target, &config, &local_root, &conn).await?;
+        add_dir(target, &config, &local_root, &conn, &ignore_filter).await?;
     } else {
         return Err(format!(
             "File {} does not exist or is not either a file or directory.",
@@ -48,6 +52,7 @@ async fn add_dir(
     config: &Config,
     local_root: &Path,
     conn: &Connection,
+    ignore_filter: &Ignore,
 ) -> Result<(), Box<dyn Error>> {
     // List all files under target and upsert.
     let mut dirs = vec![target.to_owned()];
@@ -58,6 +63,9 @@ async fn add_dir(
             let mut reads = tokio::fs::read_dir(dir).await?;
             while let Some(entry) = reads.next().await {
                 let path = entry?.path();
+                if ignore_filter.is_ignored(&path.to_string_lossy()) {
+                    continue;
+                }
                 if path.is_file() {
                     // remote_path never ends with /.
                     let remote_path = construct_remote_path(&path, &config, &local_root)?;
