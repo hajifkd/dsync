@@ -99,6 +99,8 @@ pub async fn pull(
                 "Directory {} is not empty. Ignoring...",
                 local_path.display()
             );
+        } else {
+            println!("Removing empty directory {}.", local_path.display());
         }
     }
 
@@ -150,17 +152,17 @@ async fn update_files(
                 );
             }
             FileStatus::ToBeUpdated => {
-                println!("Updating file {} ...", local_path.display());
+                println!("Updating file {}...", local_path.display());
                 download_file(&path, &config, &local_root, &conn, &token).await?;
             }
             FileStatus::ToBeCreated => {
-                println!("Creating file {} ...", local_path.display());
+                println!("Creating file {}...", local_path.display());
                 download_file(&path, &config, &local_root, &conn, &token).await?;
             }
             FileStatus::Conflicted => {
                 // merge
                 println!(
-                    "Conflict found in file {}. Merging ...",
+                    "Conflict found in file {}. Trying to merge...",
                     local_path.display()
                 );
                 let (remote_info, remote_data) = download::download(&path, token).await?;
@@ -290,6 +292,7 @@ async fn unlink_files(
                 tokio::fs::remove_file(meta_path).await?;
             }
             FileStatus::ToBeRemoved => {
+                println!("Removing file {}.", local_path.display());
                 tokio::fs::remove_file(local_path).await?;
                 tokio::fs::remove_file(meta_path).await?;
                 db::delete_file_entry(conn, path)?;

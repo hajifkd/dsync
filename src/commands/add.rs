@@ -32,7 +32,11 @@ pub async fn add(
         let remote_path = construct_remote_path(target, &config, &local_root)?;
         db::upsert_file(
             &conn,
-            &db::FileData::new(remote_path, file_hash(target).await?.to_vec()),
+            &db::FileData::new(remote_path.clone(), file_hash(target).await?.to_vec()),
+        )?;
+        db::add_update(
+            &conn,
+            &db::FileUpdate::new(remote_path, db::FileUpdate::UPDATE),
         )?;
     } else if target.is_dir() {
         add_dir(target, &config, &local_root, &conn, &ignore_filter).await?;
@@ -71,7 +75,11 @@ async fn add_dir(
                     let remote_path = construct_remote_path(&path, &config, &local_root)?;
                     db::upsert_file(
                         conn,
-                        &db::FileData::new(remote_path, file_hash(&path).await?.to_vec()),
+                        &db::FileData::new(remote_path.clone(), file_hash(&path).await?.to_vec()),
+                    )?;
+                    db::add_update(
+                        &conn,
+                        &db::FileUpdate::new(remote_path, db::FileUpdate::UPDATE),
                     )?;
                 } else if path.is_dir() {
                     new_dirs.push(path);

@@ -13,6 +13,7 @@ pub mod add;
 pub mod clone;
 pub mod init;
 pub mod pull;
+// TODO push, rm, auth?
 
 pub const CONF_DIR: &str = ".dsync";
 pub const CONF_FILE: &str = ".dsyncconfig";

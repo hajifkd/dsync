@@ -98,6 +98,14 @@ pub fn upsert_files(conn: &mut Connection, files: &[FileData]) -> Result<()> {
     Ok(())
 }
 
+pub fn add_update(conn: &Connection, fileupdate: &FileUpdate) -> Result<()> {
+    conn.execute(
+        "insert or replace into updates (path, operation) values (?1, ?2)",
+        params!(&fileupdate.path, &fileupdate.operation),
+    )?;
+    Ok(())
+}
+
 pub fn add_update_list(conn: &mut Connection, fileupdates: &[FileUpdate]) -> Result<()> {
     let tx = conn.transaction()?;
 

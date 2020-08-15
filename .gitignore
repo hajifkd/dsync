@@ -5,3 +5,4 @@ __db.*
 *.db
 .dsync*
 dsync_test
+dsync*.tar.gz
