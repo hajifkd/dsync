@@ -16,6 +16,7 @@ enum SubCommand {
     Clone(CloneCommand),
     Pull,
     Add(AddCommand),
+    Init(InitCommand),
 }
 
 #[derive(Clap)]
@@ -29,14 +30,22 @@ struct AddCommand {
     local_path: String,
 }
 
-async fn add(command: AddCommand, token: &str) -> Result<(), Box<dyn std::error::Error>> {
-    commands::add::add(&command.local_path, std::env::current_dir()?).await?;
-    Ok(())
+#[derive(Clap)]
+struct InitCommand {
+    local_path: String,
+    remote_path: String,
+}
+
+async fn init(command: InitCommand) -> Result<(), Box<dyn std::error::Error>> {
+    commands::init::init(&command.remote_path, &command.local_path).await
+}
+
+async fn add(command: AddCommand) -> Result<(), Box<dyn std::error::Error>> {
+    commands::add::add(&command.local_path, std::env::current_dir()?).await
 }
 
 async fn pull(token: &str) -> Result<(), Box<dyn std::error::Error>> {
-    commands::pull::pull(std::env::current_dir()?, token).await?;
-    Ok(())
+    commands::pull::pull(std::env::current_dir()?, token).await
 }
 
 async fn clone(command: CloneCommand, token: &str) -> Result<(), Box<dyn std::error::Error>> {
@@ -62,9 +71,7 @@ async fn clone(command: CloneCommand, token: &str) -> Result<(), Box<dyn std::er
         }
     };
 
-    commands::clone::clone(&remote_path, local_path, token).await?;
-
-    Ok(())
+    commands::clone::clone(&remote_path, local_path, token).await
 }
 
 #[tokio::main]
@@ -73,16 +80,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let token = get_token().await?;
 
     match opts.subcmd {
-        SubCommand::Clone(command) => {
-            clone(command, &token).await?;
-        }
-        SubCommand::Pull => {
-            pull(&token).await?;
-        }
-        SubCommand::Add(command) => {
-            add(command, &token).await?;
-        }
+        SubCommand::Clone(command) => clone(command, &token).await,
+        SubCommand::Pull => pull(&token).await,
+        SubCommand::Add(command) => add(command).await,
+        SubCommand::Init(command) => init(command).await,
     }
-
-    Ok(())
 }

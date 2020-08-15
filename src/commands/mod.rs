@@ -11,6 +11,7 @@ use tokio::fs;
 
 pub mod add;
 pub mod clone;
+pub mod init;
 pub mod pull;
 
 pub const CONF_DIR: &str = ".dsync";
