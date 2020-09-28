@@ -1,3 +1,4 @@
+pub mod delete;
 pub mod download;
 pub mod get_metadata;
 pub mod list_folder;

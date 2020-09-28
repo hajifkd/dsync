@@ -55,6 +55,13 @@ pub fn connect(root: impl AsRef<std::path::Path>) -> Result<Connection> {
     Ok(conn)
 }
 
+pub fn find_file(conn: &Connection, path: &str) -> Result<FileData> {
+    conn.prepare("select path, hash from files where path = ?1")?
+        .query_row(params!(path), |row| {
+            Ok(FileData::new(row.get(0)?, row.get(1)?))
+        })
+}
+
 pub fn list_files(conn: &Connection) -> Result<HashMap<String, FileData>> {
     conn.prepare("select path, hash from files")?
         .query_map(NO_PARAMS, |row| {

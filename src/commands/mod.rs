@@ -1,3 +1,4 @@
+use crate::files::delete;
 use crate::files::download;
 use crate::files::list_folder::{self, Entry};
 use crate::files::FileInfo;
@@ -100,6 +101,15 @@ pub(crate) fn construct_meta_path(
     let mut local_root = local_root.to_owned();
     local_root.push(CONF_DIR);
     construct_local_path(remote_path, config, &local_root)
+}
+
+pub(crate) async fn create_metadir_for_file(
+    remote_path: &str,
+    config: &Config,
+    local_root: impl AsRef<Path>,
+) -> Result<(), Box<dyn Error>> {
+    let remote_dir = &remote_path[..remote_path.rfind('/').unwrap_or(remote_path.len())];
+    create_metadir(remote_dir, config, local_root).await
 }
 
 pub(crate) async fn create_metadir(
